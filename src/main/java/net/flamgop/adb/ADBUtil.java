@@ -1,5 +1,6 @@
 package net.flamgop.adb;
 
+import net.flamgop.LoggingLevel;
 import net.flamgop.util.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -36,10 +37,10 @@ public class ADBUtil {
         return process.exitValue() == 0 && startedSuccessfully;
     }
 
-    public static @NotNull Pair<CompletableFuture<Void>, Process> logcat(@Nullable String adbPath, @NotNull String packageFilter, @NotNull OutputStream outputStream) throws IOException {
+    public static @NotNull Pair<CompletableFuture<Void>, Process> logcat(@Nullable String adbPath, @NotNull LoggingLevel level, @NotNull String packageFilter, @NotNull OutputStream outputStream) throws IOException {
         if (adbPath == null) adbPath = getAdbPath().toString();
         CompletableFuture<Void> future = new CompletableFuture<>();
-        ProcessBuilder builder = new ProcessBuilder(adbPath, "-d", "logcat", packageFilter + ":V", "*:S")
+        ProcessBuilder builder = new ProcessBuilder(adbPath, "-d", "logcat", packageFilter + ":" + level.adbId(), "*:S")
             .redirectErrorStream(true)
             .redirectError(ProcessBuilder.Redirect.INHERIT);
         Process process = builder.start();

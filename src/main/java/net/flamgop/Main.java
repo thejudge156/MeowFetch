@@ -7,6 +7,7 @@ import net.flamgop.util.Pair;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -41,7 +42,9 @@ public class Main {
             terminal.setLineWrap(false);
             terminal.setBackground(Color.BLACK);
             terminal.setForeground(Color.WHITE);
+            terminal.setDisabledTextColor(Color.WHITE);
             terminal.setFont(new Font("Monospaced", Font.PLAIN, 12));
+            terminal.setEnabled(false);
 
             OutputStream textAreaStream = new OutputStream() {
                 @Override
@@ -81,21 +84,102 @@ public class Main {
 
             JPanel buttonPanel = new JPanel(new GridBagLayout());
 
-            // Center button with its own constraints
             JButton centerButton = new JButton("Start Logging");
-            GridBagConstraints centerConstraints = new GridBagConstraints();
-            centerConstraints.anchor = GridBagConstraints.NORTH;
-            centerConstraints.gridx = 1;
-            centerConstraints.gridy = 0;
-            centerConstraints.weightx = 1.0;
-            centerConstraints.fill = GridBagConstraints.HORIZONTAL;
-            centerConstraints.insets = new Insets(0, 5, 5, 5);
+            GridBagConstraints centerConstraints = createGridConstraints(
+                GridBagConstraints.NORTH,
+                GridBagConstraints.HORIZONTAL,
+                1, 0,
+                new Insets(0, 5, 5, 5)
+            );
             centerButton.setEnabled(false);
             buttonPanel.add(centerButton, centerConstraints);
-            centerButton.addActionListener(e -> {
+            centerButton.setPreferredSize(new Dimension(960 / 6, 22));
+
+            JButton leftButton = new JButton("Update ADB (click me first!)");
+            GridBagConstraints leftConstraints = createGridConstraints(
+                GridBagConstraints.NORTHWEST,
+                GridBagConstraints.HORIZONTAL,
+                0, 0,
+                new Insets(0, 0, 5, 5)
+            );
+            buttonPanel.add(leftButton, leftConstraints);
+            leftButton.setPreferredSize(new Dimension(960 / 6, 22));
+
+            JPanel logLevelPanel = new JPanel();
+            JLabel label = new JLabel("Log Level: ");
+            logLevelPanel.add(label);
+
+            JComboBox<LoggingLevel> comboBox = new JComboBox<>(LoggingLevel.values());
+            logLevelPanel.add(comboBox);
+            comboBox.setEnabled(false);
+            comboBox.setSelectedIndex(1);
+
+            GridBagConstraints loggingLevelConstraints = createGridConstraints(
+                GridBagConstraints.NORTHWEST,
+                GridBagConstraints.NONE,
+                0, 1,
+                new Insets(0, 2, 5, 5)
+            );
+            buttonPanel.add(logLevelPanel, loggingLevelConstraints);
+
+            JPanel logFilterPanel = new JPanel(new GridBagLayout());
+            JLabel label2 = new JLabel("Log Filter: ");
+            label2.setPreferredSize(new Dimension(label2.getFontMetrics(label2.getFont()).stringWidth("Log Filter: "), 22));
+            logFilterPanel.add(label2, createGridConstraints(GridBagConstraints.WEST, GridBagConstraints.HORIZONTAL, 0, 0, new Insets(4, 5, 0, 0)));
+
+            JTextField textField = new JTextField();
+            logFilterPanel.add(textField, createGridConstraints(GridBagConstraints.WEST, GridBagConstraints.HORIZONTAL, 0, 0, new Insets(4, label2.getFontMetrics(label2.getFont()).stringWidth("Log Filter: ") + 10, 0, 0)));
+            textField.setText("com.qcxr.qcxr");
+            textField.setEnabled(false);
+
+            GridBagConstraints loggingFilterConstraints = createGridConstraints(
+                GridBagConstraints.NORTHWEST,
+                GridBagConstraints.HORIZONTAL,
+                1, 1,
+                new Insets(0, 0, 5, 5)
+            );
+            buttonPanel.add(logFilterPanel, loggingFilterConstraints);
+
+            // Right button with its own constraints
+            JButton rightButton = new JButton("Save Log");
+            GridBagConstraints rightConstraints = createGridConstraints(
+                GridBagConstraints.NORTHEAST,
+                GridBagConstraints.HORIZONTAL,
+                2, 0,
+                new Insets(0, 5, 5, 0)
+            );
+            rightButton.setEnabled(false);
+            buttonPanel.add(rightButton, rightConstraints);
+            rightButton.setPreferredSize(new Dimension(960 / 6, 22));
+
+            leftButton.addActionListener(_ -> {
+                leftButton.setEnabled(false);
+                centerButton.setEnabled(false);
+                centerButton.setEnabled(false);
+                comboBox.setEnabled(false);
+                textField.setEnabled(false);
+                adbPath.set(ADBUtil.getAdbPath());
+                try {
+                    textAreaStream.write("Done!\n".getBytes(StandardCharsets.UTF_8));
+                    leftButton.setText("Update ADB");
+                    leftButton.setEnabled(true);
+                    centerButton.setEnabled(true);
+                    rightButton.setEnabled(true);
+                    comboBox.setEnabled(true);
+                    textField.setEnabled(true);
+                    Toolkit.getDefaultToolkit().beep();
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
+            });
+            centerButton.addActionListener(_ -> {
                 if (adbPath.get() != null && processRef.get() == null) {
+                    comboBox.setEnabled(false);
+                    rightButton.setEnabled(false);
+                    leftButton.setEnabled(false);
+                    textField.setEnabled(false);
                     try {
-                        Pair<CompletableFuture<Void>, Process> pair = ADBUtil.logcat(adbPath.get().toString(), "com.qcxr.qcxr", proxyStream);
+                        Pair<CompletableFuture<Void>, Process> pair = ADBUtil.logcat(adbPath.get().toString(), comboBox.getItemAt(comboBox.getSelectedIndex()), textField.getText(), proxyStream);
                         pair.a().whenComplete((_, thr) -> {
                             if (thr != null) {
                                 try {
@@ -107,6 +191,10 @@ public class Main {
                                 }
                             }
                             try {
+                                comboBox.setEnabled(true);
+                                leftButton.setEnabled(true);
+                                rightButton.setEnabled(true);
+                                textField.setEnabled(true);
                                 textAreaStream.write("\nDone".getBytes(StandardCharsets.UTF_8));
                                 Toolkit.getDefaultToolkit().beep();
                             } catch (IOException ex) {
@@ -124,7 +212,11 @@ public class Main {
                     processRef.get().destroy();
                     processRef.set(null);
                     try {
-                        textAreaStream.write("\nStopped logging...\n".getBytes(StandardCharsets.UTF_8));
+                        comboBox.setEnabled(true);
+                        leftButton.setEnabled(true);
+                        rightButton.setEnabled(true);
+                        textField.setEnabled(true);
+                        textAreaStream.write("\nStopped logging\n".getBytes(StandardCharsets.UTF_8));
                         Toolkit.getDefaultToolkit().beep();
                     } catch (IOException ex) {
                         throw new RuntimeException(ex);
@@ -132,42 +224,12 @@ public class Main {
                     centerButton.setText("Start Logging");
                 }
             });
-
-            JButton leftButton = new JButton("Update ADB");
-            GridBagConstraints leftConstraints = new GridBagConstraints();
-            leftConstraints.anchor = GridBagConstraints.NORTHWEST;
-            leftConstraints.gridx = 0;
-            leftConstraints.gridy = 0;
-            leftConstraints.weightx = 1.0;
-            leftConstraints.fill = GridBagConstraints.HORIZONTAL;
-            leftConstraints.insets = new Insets(0, 0, 5, 5); // Margin around buttons
-            buttonPanel.add(leftButton, leftConstraints);
-            leftButton.addActionListener(e -> {
-                leftButton.setEnabled(false);
-                centerButton.setEnabled(false);
-                adbPath.set(ADBUtil.getAdbPath());
-                try {
-                    textAreaStream.write("Done!\n".getBytes(StandardCharsets.UTF_8));
-                    leftButton.setEnabled(true);
-                    centerButton.setEnabled(true);
-                    Toolkit.getDefaultToolkit().beep();
-                } catch (IOException ex) {
-                    throw new RuntimeException(ex);
-                }
-            });
-
-            // Right button with its own constraints
-            JButton rightButton = new JButton("Save Log");
-            GridBagConstraints rightConstraints = new GridBagConstraints();
-            rightConstraints.anchor = GridBagConstraints.NORTHEAST;
-            rightConstraints.gridx = 2;
-            rightConstraints.gridy = 0;
-            rightConstraints.weightx = 1.0;
-            rightConstraints.fill = GridBagConstraints.HORIZONTAL;
-            rightConstraints.insets = new Insets(0, 5, 5, 0);
-            buttonPanel.add(rightButton, rightConstraints);
-            rightButton.addActionListener(e -> {
+            rightButton.addActionListener(_ -> {
                 rightButton.setEnabled(false);
+                centerButton.setEnabled(false);
+                leftButton.setEnabled(false);
+                comboBox.setEnabled(false);
+                textField.setEnabled(false);
                 try {
                     streamRef.get().close();
                     streamRef.set(null);
@@ -180,6 +242,7 @@ public class Main {
                     String fileName = fileDialog.getFile();
                     if (fileName != null) {
                         File file = new File(fileName);
+                        //noinspection ResultOfMethodCallIgnored
                         file.createNewFile();
                         try (FileInputStream fis = new FileInputStream(logOutput)) {
                             try (FileOutputStream fos = new FileOutputStream(file)) {
@@ -195,6 +258,10 @@ public class Main {
                     throw new RuntimeException(ex);
                 }
                 rightButton.setEnabled(true);
+                centerButton.setEnabled(true);
+                leftButton.setEnabled(true);
+                comboBox.setEnabled(true);
+                textField.setEnabled(true);
             });
 
             frame.setLayout(new BorderLayout(4, 4));
@@ -203,7 +270,20 @@ public class Main {
             topPanel.add(buttonPanel, BorderLayout.SOUTH);
             frame.add(topPanel, BorderLayout.NORTH);
 
+            leftButton.requestFocus(FocusEvent.Cause.MOUSE_EVENT);
             frame.setVisible(true);
         });
+    }
+
+    private static GridBagConstraints createGridConstraints(int anchor, int fill, int x, int y, Insets insets) {
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.anchor = anchor;
+        constraints.gridx = x;
+        constraints.gridy = y;
+        constraints.weightx = 1.0;
+        constraints.weighty = 1.0;
+        constraints.fill = fill;
+        constraints.insets = insets;
+        return constraints;
     }
 }
