@@ -152,7 +152,7 @@ public class Main {
             buttonPanel.add(rightButton, rightConstraints);
             rightButton.setPreferredSize(new Dimension(960 / 6, 22));
 
-            leftButton.addActionListener(_ -> {
+            leftButton.addActionListener(ignored -> {
                 leftButton.setEnabled(false);
                 centerButton.setEnabled(false);
                 centerButton.setEnabled(false);
@@ -172,7 +172,7 @@ public class Main {
                     throw new RuntimeException(ex);
                 }
             });
-            centerButton.addActionListener(_ -> {
+            centerButton.addActionListener(ignored -> {
                 if (adbPath.get() != null && processRef.get() == null) {
                     comboBox.setEnabled(false);
                     rightButton.setEnabled(false);
@@ -180,7 +180,7 @@ public class Main {
                     textField.setEnabled(false);
                     try {
                         Pair<CompletableFuture<Void>, Process> pair = ADBUtil.logcat(adbPath.get().toString(), comboBox.getItemAt(comboBox.getSelectedIndex()), textField.getText(), proxyStream);
-                        pair.a().whenComplete((_, thr) -> {
+                        pair.a().whenComplete((ignored1, thr) -> {
                             if (thr != null) {
                                 try {
                                     textAreaStream.write("\n".getBytes(StandardCharsets.UTF_8));
@@ -224,7 +224,7 @@ public class Main {
                     centerButton.setText("Start Logging");
                 }
             });
-            rightButton.addActionListener(_ -> {
+            rightButton.addActionListener(ignored -> {
                 rightButton.setEnabled(false);
                 centerButton.setEnabled(false);
                 leftButton.setEnabled(false);
@@ -236,7 +236,7 @@ public class Main {
                     FileDialog fileDialog = new FileDialog(frame, "Choose a save location", FileDialog.SAVE);
                     fileDialog.setDirectory(new File("./").getAbsolutePath());
                     fileDialog.setFile("log.txt");
-                    fileDialog.setFilenameFilter((_, name) -> name.endsWith(".txt"));
+                    fileDialog.setFilenameFilter((ignored1, name) -> name.endsWith(".txt"));
                     fileDialog.addNotify();
                     fileDialog.setVisible(true);
                     String fileName = fileDialog.getFile();

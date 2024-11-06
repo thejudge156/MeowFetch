@@ -66,7 +66,7 @@ public class ADBUtil {
             }
             try {
                 reader.close();
-            } catch (IOException _) {
+            } catch (IOException ignored) {
             }
         });
         return new Pair<>(future,process);
