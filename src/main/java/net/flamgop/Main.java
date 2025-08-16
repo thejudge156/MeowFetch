@@ -1,8 +1,9 @@
 package net.flamgop;
 
 import com.formdev.flatlaf.FlatDarkLaf;
+import dadb.AdbShellStream;
+import dadb.Dadb;
 import net.flamgop.adb.ADBUtil;
-import net.flamgop.util.Pair;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -20,8 +21,7 @@ public class Main {
         SwingUtilities.invokeLater(() -> {
             FlatDarkLaf.setup();
 
-            AtomicReference<Path> adbPath = new AtomicReference<>();
-            AtomicReference<Process> processRef = new AtomicReference<>();
+            AtomicReference<CompletableFuture<Void>> future = new AtomicReference<>();
 
             JFrame frame = new JFrame("MeowFetch");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -95,7 +95,7 @@ public class Main {
             buttonPanel.add(centerButton, centerConstraints);
             centerButton.setPreferredSize(new Dimension(960 / 6, 22));
 
-            JButton leftButton = new JButton("Update ADB (click me first!)");
+            JButton leftButton = new JButton("Init ADB (click me first!)");
             GridBagConstraints leftConstraints = createGridConstraints(
                 GridBagConstraints.NORTHWEST,
                 GridBagConstraints.HORIZONTAL,
@@ -153,15 +153,25 @@ public class Main {
             rightButton.setPreferredSize(new Dimension(960 / 6, 22));
 
             leftButton.addActionListener(ignored -> {
+                try {
+                    ADBUtil.initADB();
+                } catch (IllegalStateException e) {
+                    try {
+                        // ew
+                        textAreaStream.write("No device detected! Is there a prompt on your headset?\n".getBytes(StandardCharsets.UTF_8));
+                    } catch (IOException e1) {
+                        throw new RuntimeException(e1);
+                    }
+                    return;
+                }
                 leftButton.setEnabled(false);
                 centerButton.setEnabled(false);
                 centerButton.setEnabled(false);
                 comboBox.setEnabled(false);
                 textField.setEnabled(false);
-                adbPath.set(ADBUtil.getAdbPath());
                 try {
                     textAreaStream.write("Done!\n".getBytes(StandardCharsets.UTF_8));
-                    leftButton.setText("Update ADB");
+                    leftButton.setText("Reinit ADB");
                     leftButton.setEnabled(true);
                     centerButton.setEnabled(true);
                     rightButton.setEnabled(true);
@@ -173,14 +183,14 @@ public class Main {
                 }
             });
             centerButton.addActionListener(ignored -> {
-                if (adbPath.get() != null && processRef.get() == null) {
+                if (future.get() == null) {
                     comboBox.setEnabled(false);
                     rightButton.setEnabled(false);
                     leftButton.setEnabled(false);
                     textField.setEnabled(false);
                     try {
-                        Pair<CompletableFuture<Void>, Process> pair = ADBUtil.logcat(adbPath.get().toString(), comboBox.getItemAt(comboBox.getSelectedIndex()), textField.getText(), proxyStream);
-                        pair.a().whenComplete((ignored1, thr) -> {
+                        CompletableFuture<Void> pair = ADBUtil.logcat(comboBox.getItemAt(comboBox.getSelectedIndex()), textField.getText(), proxyStream);
+                        pair.whenComplete((ignored1, thr) -> {
                             if (thr != null) {
                                 try {
                                     textAreaStream.write("\n".getBytes(StandardCharsets.UTF_8));
@@ -201,16 +211,16 @@ public class Main {
                                 throw new RuntimeException(ex);
                             }
                         });
-                        processRef.set(pair.b());
+                        future.set(pair);
                         textAreaStream.write("Started logging...\n".getBytes(StandardCharsets.UTF_8));
                         Toolkit.getDefaultToolkit().beep();
                         centerButton.setText("Stop Logging");
                     } catch (IOException ex) {
                         throw new RuntimeException(ex);
                     }
-                } else if (processRef.get() != null) {
-                    processRef.get().destroy();
-                    processRef.set(null);
+                } else if (future.get() != null) {
+                    future.set(null);
+                    ADBUtil.stream.ifPresent(AdbShellStream::close);
                     try {
                         comboBox.setEnabled(true);
                         leftButton.setEnabled(true);
@@ -269,6 +279,18 @@ public class Main {
             topPanel.add(scrollPane, BorderLayout.NORTH);
             topPanel.add(buttonPanel, BorderLayout.SOUTH);
             frame.add(topPanel, BorderLayout.NORTH);
+
+            Thread thread = new Thread(() -> {
+                while(true) {
+                    terminal.moveCaretPosition(terminal.getDocument().getLength());
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException ex) {
+                        // whatev
+                    }
+                }
+            });
+            thread.start();
 
             leftButton.requestFocus(FocusEvent.Cause.MOUSE_EVENT);
             frame.setVisible(true);
